@@ -5,6 +5,7 @@
     python -m battery_lab extract              .mat에서 셀마다 값 추리기
     python -m battery_lab assemble             논문 규칙대로 124개 셀 데이터셋 만들기
     python -m battery_lab report               품질 점검·논문 비교·그래프 → docs/data_quality.md
+    python -m battery_lab sizes                데이터 크기 실험 (셀이 70·35·10개뿐이었다면?) → docs/data_size.md
 """
 
 import argparse
@@ -93,6 +94,15 @@ def cmd_report(args) -> None:
           f"100사이클 용량 변화 중앙값 {c['change_100_median_pct']:+.2f}% · ΔQ 분산-수명 상관 r = {c['logvar_corr']:.3f}")
 
 
+def cmd_sizes(args) -> None:
+    from .size_report import DOCS, build  # 그래프·모델 라이브러리는 이 명령에서만 불러온다
+
+    out = build(repeats=args.repeats, corr_repeats=args.corr_repeats)
+    print(f"데이터 크기 실험 → {DOCS / 'data_size.md'}")
+    for (n, kind), v in sorted(out["summary"]["pred"].items(), key=lambda kv: (-kv[0][0], kv[0][1])):
+        print(f"  셀 {n}개 · {kind}: 실제 오차 중앙값 {v['actual_median']:.1f}% (10~90% {v['actual_p10']:.1f}~{v['actual_p90']:.1f}%)")
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="battery_lab", description="배터리 수명 예측·열화 분석")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -107,6 +117,10 @@ def main(argv=None) -> None:
     p.set_defaults(func=cmd_extract)
     sub.add_parser("assemble", help="논문 규칙대로 데이터셋 만들기").set_defaults(func=cmd_assemble)
     sub.add_parser("report", help="품질 점검·논문 비교·그래프").set_defaults(func=cmd_report)
+    p = sub.add_parser("sizes", help="데이터 크기 실험 (셀이 70·35·10개뿐이었다면?)")
+    p.add_argument("--repeats", type=int, default=300, help="크기마다 예측 실험 반복 수")
+    p.add_argument("--corr-repeats", type=int, default=2000, help="크기마다 상관 실험 반복 수")
+    p.set_defaults(func=cmd_sizes)
     args = parser.parse_args(argv)
     args.func(args)
 

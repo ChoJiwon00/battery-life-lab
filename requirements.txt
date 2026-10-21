@@ -2,4 +2,5 @@ numpy>=2.0
 pandas>=2.2
 h5py>=3.10
 matplotlib>=3.9
+scikit-learn>=1.5
 pytest>=8.0

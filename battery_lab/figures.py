@@ -187,3 +187,94 @@ def quality_example(summary: pd.DataFrame, reports: list[CellReport], path: Path
              color=INK_2, fontsize=9.5)
     fig.tight_layout(rect=(0, 0, 1, 0.9))
     return _save(fig, path)
+
+
+# ---------------------------------------------------------------- 데이터 크기 실험
+
+MODEL_COLORS = {"simple": ("단순 모델 (ΔQ 분산 1개)", "#2a78d6"), "full": ("6개 특징 모델 (Elastic Net)", "#eb6834")}
+
+
+def data_size_corr(corr: pd.DataFrame, full_r: float, path: Path) -> Path:
+    """N개만 있었다면 상관 r이 얼마나 흔들렸을까 (5~95% 구간과 25~75% 상자)."""
+    _style()
+    sizes = sorted(corr["n"].unique(), reverse=True)
+    fig, ax = plt.subplots(figsize=(8, 3.6))
+    for y, n in enumerate(sizes):
+        r = corr.loc[corr["n"] == n, "r"].to_numpy()
+        if len(r) == 1:
+            ax.scatter(r, [y], s=60, color="#1c5cab", zorder=3)
+            continue
+        p5, p25, p50, p75, p95 = np.percentile(r, [5, 25, 50, 75, 95])
+        ax.plot([p5, p95], [y, y], color="#5598e7", lw=1.5, solid_capstyle="round")
+        ax.add_patch(plt.Rectangle((p25, y - 0.18), p75 - p25, 0.36, facecolor="#b7d3f6", edgecolor="#2a78d6", lw=1))
+        ax.scatter([p50], [y], s=40, color="#1c5cab", zorder=3)
+        ax.text(p5 - 0.004, y, f"{p5:.2f}", ha="right", va="center", fontsize=8.5, color=INK_2)
+        ax.text(p95 + 0.004, y, f"{p95:.2f}", ha="left", va="center", fontsize=8.5, color=INK_2)
+    ax.axvline(full_r, color=INK_2, lw=1, ls=(0, (4, 3)))
+    ax.text(full_r + 0.003, -0.58, f"124개 전체 r = {full_r:.3f}", ha="left", va="center", fontsize=9, color=INK_2)
+    ax.set_yticks(range(len(sizes)), labels=[f"{n}개" for n in sizes])
+    ax.set_ylim(len(sizes) - 0.5, -0.7)
+    ax.set_xlim(-1.0, -0.75)
+    ax.set_xlabel("log Var(ΔQ₁₀₀₋₁₀)와 log 수명의 상관계수 r (−1에 가까울수록 강함)")
+    ax.grid(axis="y", visible=False)
+    ax.set_title("셀이 10개뿐이었어도 같은 신호를 찾았을 거예요")
+    _subtitle(ax, "N개를 2,000번 무작위로 뽑아 다시 계산 · 선 = 5~95% · 상자 = 25~75% · 점 = 중앙값")
+    return _save(fig, path)
+
+
+def data_size_error(summary: dict, path: Path) -> Path:
+    """데이터 크기별 오차: 왼쪽 실제 오차(나머지 모든 셀), 오른쪽 보고된 오차(뽑힌 셀 안)."""
+    _style()
+    sizes = sorted({n for n, _ in summary}, reverse=True)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.4), sharey=True)
+    for ax, key, title in ((axes[0], "actual", "실제 오차 (학습에 안 쓴 나머지 모든 셀)"),
+                           (axes[1], "reported", "보고된 오차 (뽑힌 셀 안에서만 평가)")):
+        for offset, kind in ((-0.1, "simple"), (0.1, "full")):
+            label, color = MODEL_COLORS[kind]
+            xs, med, lo, hi = [], [], [], []
+            for x, n in enumerate(sizes):
+                v = summary.get((n, kind))
+                if v is None:
+                    continue
+                xs.append(x + offset); med.append(v[f"{key}_median"])
+                lo.append(v[f"{key}_median"] - v[f"{key}_p10"]); hi.append(v[f"{key}_p90"] - v[f"{key}_median"])
+            ax.errorbar(xs, med, yerr=[lo, hi], fmt="o", ms=7, color=color, ecolor=color, elinewidth=1.6, capsize=4,
+                        label=label, zorder=3)
+            ax.plot(xs, med, color=color, lw=1, alpha=0.5)
+        ax.axhline(15, color=INK_2, lw=1, ls=(0, (4, 3)))
+        ax.set_xticks(range(len(sizes)), labels=[f"{n}개\n(학습 {summary[(n, 'simple')]['n_train']})" for n in sizes])
+        ax.set_title(title, fontsize=11, pad=8)
+        ax.set_xlabel("가지고 있던 셀 수")
+    for x, n in enumerate(sizes):
+        if (n, "full") not in summary:  # 학습 셀이 6개 미만이면 6개 특징 모델을 만들지 않는다
+            for ax in axes:
+                ax.text(x + 0.1, ax.get_ylim()[0] + 0.6, "6개 특징\n모델 없음", ha="center", va="bottom",
+                        fontsize=8, color=MODEL_COLORS["full"][1])
+    axes[0].set_ylabel("평균 % 오차 (MAPE)")
+    axes[0].legend(frameon=False, loc="upper left", labelcolor=INK_2)
+    fig.suptitle("셀이 적을수록 평균보다 '운'이 커져요", x=0.01, ha="left", fontsize=13, fontweight="bold", color=INK)
+    fig.text(0.01, 0.905, "N개를 300번 무작위로 뽑아 1/3로 학습 · 점 = 중앙값 · 막대 = 10~90% 범위 · 점선 = 15%",
+             color=INK_2, fontsize=9.5)
+    fig.tight_layout(rect=(0, 0, 1, 0.9))
+    return _save(fig, path)
+
+
+def data_size_flatter(pred: pd.DataFrame, n: int, path: Path) -> Path:
+    """셀 N개 연구 300번: 보고된 오차 vs 실제 오차. 대각선 아래 = 실제보다 좋게 보고됨."""
+    _style()
+    g = pred[(pred["n"] == n) & (pred["model"] == "simple")]
+    flattered = (g["actual_mape"] - g["reported_mape"]) >= 5
+    fig, ax = plt.subplots(figsize=(6.4, 5.2))
+    top = float(np.percentile(np.r_[g["actual_mape"], g["reported_mape"]], 97)) * 1.05
+    ax.plot([0, top], [0, top], color=AXIS, lw=1)
+    ax.plot([5, top], [0, top - 5], color=INK_2, lw=1, ls=(0, (4, 3)))
+    ax.scatter(g.loc[~flattered, "actual_mape"], g.loc[~flattered, "reported_mape"], s=22, color="#2a78d6", alpha=0.7,
+               edgecolor="none", label=f"비슷하거나 더 나쁘게 보고 ({(~flattered).sum()}번)")
+    ax.scatter(g.loc[flattered, "actual_mape"], g.loc[flattered, "reported_mape"], s=30, marker="v", color=WARN,
+               edgecolor=INK, linewidth=0.4, label=f"⚠ 실제보다 5%p 넘게 좋게 보고 ({flattered.sum()}번)")
+    ax.set(xlim=(0, top), ylim=(0, top), xlabel="실제 오차 (%)", ylabel="보고된 오차 (%)")
+    ax.set_aspect("equal")
+    ax.set_title(f"셀 {n}개로 한 연구 300번: 보고 vs 실제")
+    _subtitle(ax, "점선 아래 = 논문에 실제보다 5%p 넘게 좋은 숫자가 실렸을 경우")
+    ax.legend(frameon=False, loc="upper left", labelcolor=INK_2, fontsize=8.5)
+    return _save(fig, path)
