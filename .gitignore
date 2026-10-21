@@ -1,0 +1,9 @@
+# 내려받은 데이터와 만든 데이터 (약 7.7GB, GitHub에 올리지 않는다)
+/data/
+*.mat
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
