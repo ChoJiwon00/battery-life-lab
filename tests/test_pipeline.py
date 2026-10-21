@@ -76,7 +76,8 @@ def test_assemble_merges_carryover_removes_cells_and_writes_files(fake_mat, tmp_
     rows = list(csv.DictReader(open(tmp_path / "out" / "cells.csv", encoding="utf-8")))
     assert [r["cell_id"] for r in rows] == ["b1c0", "b1c1", "b1c2", "b1c3", "b2c0", "b2c1", "b3c0"]
     first = rows[0]
-    assert (first["cycle_life"], first["n_cycles"], first["merged_from"]) == ("17", "14", "b2c2")
+    assert (first["cycle_life"], first["n_cycles"], first["merged_from"], first["seam_cycle"]) == ("17", "14", "b2c2", "11")
+    assert rows[1]["seam_cycle"] == ""
     # 1·2배치 6개: 0·2·4번째와 마지막(5번째)은 테스트, 1·3번째는 학습
     assert [r["split"] for r in rows] == ["test", "train", "test", "train", "test", "test", "secondary_test"]
 

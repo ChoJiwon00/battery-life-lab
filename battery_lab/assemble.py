@@ -1,7 +1,7 @@
 """배치별로 추린 셀(data/interim)을 논문 규칙대로 고르고 이어 붙여 하나의 데이터셋(data/processed)으로 만든다.
 
 만드는 것
-- cells.csv    셀마다 한 줄: 배치, 충전 조건, 수명, 사이클 수, 학습/테스트 구분
+- cells.csv    셀마다 한 줄: 배치, 충전 조건, 수명, 사이클 수, 학습/테스트 구분, 이어 붙인 지점(seam_cycle)
 - summary.csv  사이클마다 한 줄: 방전·충전 용량, 내부저항, 온도, 충전 시간
 - curves/<셀>.npz  사이클별 Qdlin · dQdV · Tdlin
 - raw/<셀>.npz     몇몇 사이클의 원시 데이터
@@ -55,6 +55,7 @@ def merge(dst: dict, src: dict, add_life: int) -> dict:
         out[f"raw_{name}"] = np.concatenate([p[name] for p in parts]) if parts else np.empty(0)
     out["raw_offsets"] = np.cumsum([0, *(len(p["t"]) for p in parts)]).astype(np.int64)
     out["merged_from"] = np.array(src.get("_id", ""))
+    out["seam_cycle"] = np.float64(n_summary + src["summary_cycle"][0])  # 이어 붙인 쪽의 첫 사이클
     return out
 
 
@@ -74,17 +75,22 @@ def assemble(interim: Path, out_dir: Path, rules: Rules = PAPER_RULES, cells: di
     with open(out_dir / "cells.csv", "w", newline="", encoding="utf-8") as fc, \
          open(out_dir / "summary.csv", "w", newline="", encoding="utf-8") as fs:
         wc, ws = csv.writer(fc), csv.writer(fs)
-        wc.writerow(["cell_id", "batch", "policy", "cycle_life", "n_cycles", "split", "merged_from"])
+        wc.writerow(["cell_id", "batch", "policy", "cycle_life", "n_cycles", "split", "merged_from", "seam_cycle"])
         ws.writerow(["cell_id", *SUMMARY_FIELDS.values()])
         for cid in order:
             c = cells[cid]
             life = float(c["cycle_life"])
             wc.writerow([cid, cid[:2], str(c["policy"]), "" if np.isnan(life) else f"{life:g}",
-                         c["Qdlin"].shape[0], split[cid], str(c.get("merged_from", ""))])
+                         c["Qdlin"].shape[0], split[cid], str(c.get("merged_from", "")),
+                         f"{float(c['seam_cycle']):g}" if "seam_cycle" in c else ""])
             columns = [c[f"summary_{name}"] for name in SUMMARY_FIELDS.values()]
             for row in zip(*columns):
                 ws.writerow([cid, *(f"{v:.6g}" for v in row)])
-            np.savez_compressed(out_dir / "curves" / f"{cid}.npz", **{name: c[name] for name in CURVES})
+            curves = {name: c[name] for name in CURVES}
+            if "Vdlin" in c:
+                curves["Vdlin"] = c["Vdlin"]
+            curves["cycle"] = c["summary_cycle"][: c["Qdlin"].shape[0]]  # 행마다 사이클 번호 (행 j = 요약 j번째)
+            np.savez_compressed(out_dir / "curves" / f"{cid}.npz", **curves)
             np.savez_compressed(out_dir / "raw" / f"{cid}.npz",
                                 **{k: c[k] for k in ("raw_index", "raw_offsets", *(f"raw_{n}" for n in RAW_FIELDS))})
 

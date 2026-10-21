@@ -4,6 +4,7 @@
     python -m battery_lab download [--yes]     데이터 내려받기 (--yes가 있어야 실제로 받음)
     python -m battery_lab extract              .mat에서 셀마다 값 추리기
     python -m battery_lab assemble             논문 규칙대로 124개 셀 데이터셋 만들기
+    python -m battery_lab report               품질 점검·논문 비교·그래프 → docs/data_quality.md
 """
 
 import argparse
@@ -83,6 +84,15 @@ def cmd_assemble(args) -> None:
         print("  논문과 같은 124개예요 (학습 41 · 테스트 43 · 2차 테스트 40).")
 
 
+def cmd_report(args) -> None:
+    from .report import DOCS, build  # 그래프 라이브러리는 이 명령에서만 불러온다
+
+    c = build(PROCESSED)
+    print(f"품질 점검·논문 비교 → {DOCS / 'data_quality.md'}, 그래프 → {DOCS / 'figures'}")
+    print(f"  셀 {c['cells']}개 · 수명 {c['life_min']:,.0f}~{c['life_max']:,.0f} · "
+          f"100사이클 용량 변화 중앙값 {c['change_100_median_pct']:+.2f}% · ΔQ 분산-수명 상관 r = {c['logvar_corr']:.3f}")
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="battery_lab", description="배터리 수명 예측·열화 분석")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -96,6 +106,7 @@ def main(argv=None) -> None:
     p.add_argument("--force", action="store_true", help="이미 추린 셀도 다시")
     p.set_defaults(func=cmd_extract)
     sub.add_parser("assemble", help="논문 규칙대로 데이터셋 만들기").set_defaults(func=cmd_assemble)
+    sub.add_parser("report", help="품질 점검·논문 비교·그래프").set_defaults(func=cmd_report)
     args = parser.parse_args(argv)
     args.func(args)
 

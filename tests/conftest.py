@@ -33,7 +33,8 @@ def write_fake_mat(path: Path, cells: list[dict]) -> Path:
         life, policy, summary, cycles = [], [], [], []
         for c in cells:
             n, raw_len = c["n"], c.get("raw_len", 5)
-            cap = 1.1 - 0.001 * np.arange(n)
+            rate = 0.2 / c["life"] if np.isfinite(c["life"]) and c["life"] > 0 else 0.001  # 수명이 짧을수록 빨리 줄어든다
+            cap = 1.1 - rate * np.arange(n)
             life.append(put(np.array([[c["life"]]], dtype=float)))
             policy.append(put(_utf16(c["policy"])))
 
@@ -52,7 +53,7 @@ def write_fake_mat(path: Path, cells: list[dict]) -> Path:
                 "Tdlin": lambda j: np.full((1, POINTS), 30.0 + j),
                 "t": lambda j: np.arange(raw_len, dtype=float).reshape(-1, 1) + j,
                 "V": lambda j: np.linspace(3.6, 2.0, raw_len).reshape(-1, 1),
-                "I": lambda j: np.full((raw_len, 1), -4.4),
+                "I": lambda j: np.full((raw_len, 1), -4.0),  # 진짜 데이터처럼 C-rate 단위 (4C 방전)
                 "Qc": lambda j: np.zeros((raw_len, 1)),
                 "Qd": lambda j: np.linspace(0, cap[j], raw_len).reshape(-1, 1),
                 "T": lambda j: np.full((raw_len, 1), 31.0),

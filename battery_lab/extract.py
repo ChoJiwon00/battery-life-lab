@@ -56,12 +56,9 @@ def read_cell(f: h5py.File, i: int) -> dict[str, np.ndarray]:
         "cycle_life": np.float64(_array(f, batch["cycle_life"][i, 0])[0]),
         "policy": np.array(_text(f, batch["policy_readable"][i, 0])),
     }
-    for key in ("barcode", "channel_id"):  # 있으면 같이 남긴다
-        if key in batch:
-            try:
-                data[key] = np.array(_text(f, batch[key][i, 0]))
-            except (TypeError, ValueError, UnicodeDecodeError):
-                pass
+    if "Vdlin" in batch:  # Qdlin의 전압 눈금 (3.5V → 2.0V, 1000칸)
+        data["Vdlin"] = _array(f, batch["Vdlin"][i, 0]).astype(np.float64)
+    # barcode·channel_id는 MATLAB string 객체(uint32)로 저장돼 있어 읽지 않는다.
 
     summary = f[batch["summary"][i, 0]]
     for src, dst in SUMMARY_FIELDS.items():
