@@ -14,7 +14,7 @@
 ## 두 PC에서 작업하기
 
 - 이 저장소는 두 PC에서 동시에 작업한다. 작업을 시작하기 전에 `git pull`, 끝나면 `git push`를 한다.
-- 비공개 메모(`private/`, `CLAUDE.local.md`)는 GitHub에 없어서 PC끼리 자동으로 맞춰지지 않는다. 있는 PC에서만 읽는다.
+- 비공개 메모(`private/`, `CLAUDE.local.md`)는 이 공개 저장소에 올리지 않는다. `private/`는 따로 맞추는 폴더라 그 안에서도 작업 전후로 `git pull`·`git push`를 한다.
 
 ## 작업 방법
 
