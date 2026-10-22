@@ -123,3 +123,13 @@ def test_download_rejects_wrong_size(tmp_path):
 
 def test_batch_sizes_match_what_the_server_reported():
     assert sum(b.size for b in BATCHES) == 8_269_341_808
+
+
+def test_cli_help_lists_every_command(capsys):
+    from battery_lab.__main__ import EXPERIMENTS, main
+
+    with pytest.raises(SystemExit):
+        main(["--help"])  # 도움말의 %가 서식 기호로 읽혀 오류가 났던 적이 있다
+    out = capsys.readouterr().out
+    for name in ("info", "download", "extract", "assemble", "report", "sizes", *EXPERIMENTS):
+        assert name in out

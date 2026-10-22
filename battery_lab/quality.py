@@ -247,21 +247,45 @@ def check_all(folder: Path) -> list[CellReport]:
             for meta in cells.to_dict("records")]
 
 
-def hotspots(reports: list[CellReport], width: int = 20) -> dict[str, dict]:
-    """배치마다 이상(회복 튐·범위 밖 용량·깨진 곡선·긴 충전 시간)이 가장 많이 몰린 사이클 구간."""
+def _event_cycles(r: CellReport) -> tuple[int, ...]:
+    return (*r.recovery_cycles, *r.bad_qd_cycles, *r.broken_curve_cycles, *r.long_charge_cycles)
+
+
+def hotspots(reports: list[CellReport], width: int = 20, min_cells: int = 5) -> dict[str, dict]:
+    """배치마다 이상(회복 튐·범위 밖 용량·깨진 곡선·긴 충전 시간)이 몰린 곳.
+
+    - start/end/events/cells: 이상이 가장 많은 width사이클 고정 구간 (0~19, 20~39 …).
+    - clusters: 이상을 사이클 순으로 놓고 바로 앞 이상과 width사이클 안이면 한 무리로 이은 것 중, 셀 min_cells개 이상이
+      겪은 무리. 실제로 몰린 사이클(first~last)을 그대로 돌려준다. 고정 구간은 한 무리가 두 구간에 걸치면 둘로 쪼개고
+      (b1의 141~166 → 140~159와 160~179), 구간 이름만으로는 무리가 어느 사이클인지 알 수 없다
+      (b1 '0~19'의 9건은 모두 12~13). running = 무리가 시작된 사이클까지 기록이 있는 셀 수.
+    """
     out = {}
     for batch in sorted({r.batch for r in reports}):
-        cyc = [c for r in reports if r.batch == batch
-               for c in (*r.recovery_cycles, *r.bad_qd_cycles, *r.broken_curve_cycles, *r.long_charge_cycles)]
+        members = [r for r in reports if r.batch == batch]
+        cyc = [c for r in members for c in _event_cycles(r)]
         if not cyc:
             continue
         bins = pd.Series(np.asarray(cyc) // width * width).value_counts()
         start = int(bins.index[0])
-        cells = sum(any(start <= c < start + width
-                        for c in (*r.recovery_cycles, *r.bad_qd_cycles, *r.broken_curve_cycles, *r.long_charge_cycles))
-                    for r in reports if r.batch == batch)
+        cells = sum(any(start <= c < start + width for c in _event_cycles(r)) for r in members)
+
+        events = sorted((int(c), r.cell_id) for r in members for c in _event_cycles(r))
+        groups = [[events[0]]]
+        for e in events[1:]:
+            if e[0] - groups[-1][-1][0] <= width:
+                groups[-1].append(e)
+            else:
+                groups.append([e])
+        clusters = []
+        for g in groups:
+            ids = {cid for _, cid in g}
+            if len(ids) >= min_cells:
+                clusters.append({"first": g[0][0], "last": g[-1][0], "events": len(g), "cells": len(ids),
+                                 "running": sum(r.n_cycles >= g[0][0] for r in members)})
+
         out[batch] = {"start": start, "end": start + width - 1, "events": int(bins.iloc[0]), "total": len(cyc),
-                      "cells": cells, "batch_cells": sum(r.batch == batch for r in reports)}
+                      "cells": cells, "batch_cells": len(members), "clusters": clusters}
     return out
 
 

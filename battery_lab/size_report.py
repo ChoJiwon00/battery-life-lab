@@ -9,10 +9,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .mdtext import write_doc
 from . import features as feat
 from . import figures, sizes
 from .model import NAMES, baseline
-from .sources import PROCESSED, ROOT
+from .sources import PAPER_RULES, PROCESSED, ROOT
 
 DOCS = ROOT / "docs"
 # 논문 수치는 기억이 아니라 인용 출처로 확인한 것만 쓴다 (troubleshooting.md 16번)
@@ -39,19 +40,30 @@ def build(processed: Path = PROCESSED, docs: Path = DOCS, repeats: int = sizes.R
     figures.data_size_error(summary["pred"], fig_dir / "data_size_error.png")
     smallest = min(sizes.SIZES)
     figures.data_size_flatter(pred, smallest, fig_dir / "data_size_flatter.png")
-    (docs / "data_size.md").write_text(markdown(base, summary, full_r, repeats, corr_repeats), encoding="utf-8")
+    write_doc(docs / "data_size.md", markdown(base, summary, full_r, repeats, corr_repeats, same_policy_counts(f)))
     return {"baseline": base, "summary": summary, "full_r": full_r}
+
+
+def same_policy_counts(f: pd.DataFrame) -> dict[str, tuple[int, int]]:
+    """논문 나누기에서 학습 셀과 충전 조건(policy)이 같은 평가 셀 수: {나누기: (같은 조건 셀 수, 전체 셀 수)}."""
+    seen = set(f.loc[f["split"] == "train", "policy"])
+    return {sp: (int(f.loc[f["split"] == sp, "policy"].isin(seen).sum()), int((f["split"] == sp).sum()))
+            for sp in ("test", "secondary_test")}
 
 
 def _pct(x: float) -> str:
     return f"{x * 100:.0f}%"
 
 
-def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repeats: int) -> str:
+def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repeats: int,
+             same_policy: dict[str, tuple[int, int]] | None = None) -> str:
     c, p = s["corr"], s["pred"]
     ns = sorted({n for n, _ in p}, reverse=True)
     small = min(ns)
     b = {(r.model, r.split): r for r in base.itertuples()}
+    n_used = int(base.loc[base["model"] == "simple", "cells"].sum())          # 논문 규칙으로 고른 셀
+    n_cells = n_used + len(PAPER_RULES.removed)                                # 실제로 시험한 셀 (물리적으로)
+    n_records = n_cells + len(PAPER_RULES.carryover)                           # 원본 파일의 기록 수
     lines = [
         "# 데이터 크기 실험: 셀이 70·35·10개뿐이었다면?",
         "",
@@ -59,7 +71,9 @@ def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repe
         "",
         "## 질문",
         "",
-        "원래 시험한 셀은 140개, 논문이 쓴 셀은 124개예요. 배터리 수명 시험은 셀 하나에 몇 달이 걸려서,",
+        f"원래 시험한 셀은 {n_cells}개, 논문이 쓴 셀은 {n_used}개예요"
+        f" (원본 기록은 {n_records}개인데, 그중 {len(PAPER_RULES.carryover)}개는 1배치 셀을 2배치에서 이어 시험한 같은 셀이에요)."
+        " 배터리 수명 시험은 셀 하나에 몇 달이 걸려서,",
         "**\"셀이 몇 개면 충분한가\"는 곧 시간과 비용의 문제**예요. 그래서 이렇게 물었어요.",
         "",
         "1. 셀이 적었어도 \"초반 ΔQ 분산이 수명을 알려 준다\"는 **발견**을 할 수 있었을까?",
@@ -69,6 +83,8 @@ def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repe
         "",
         f"- 124개 셀에서 N개(124·70·35·10)를 무작위로 뽑아 \"그 N개만 있었던 연구\"를 흉내 내요.",
         f"- **실험 1 (발견):** 뽑은 N개 안에서 상관 r을 다시 계산해요. N마다 {corr_repeats:,}번.",
+        "  - **상관 r**(피어슨 상관계수)은 두 값이 한 직선을 따라 함께 움직이는 정도예요. −1~+1 사이이고, −1에 가까울수록"
+        " \"ΔQ 분산이 클수록 수명이 짧다\"는 관계가 뚜렷하며, 0이면 직선 관계가 없어요. 이 문서는 −0.8보다 −1 쪽이면 강한 신호로 봐요.",
         f"- **실험 2 (예측):** 뽑은 N개를 논문처럼 1/3은 학습, 2/3는 평가에 써요. N마다 {repeats}번.",
         "  - **보고된 오차:** 뽑힌 N개 안의 평가 셀로 잰 오차예요. 그 연구가 논문에 썼을 숫자예요.",
         "  - **실제 오차:** 학습에 안 쓴 나머지 **모든** 셀로 잰 오차예요. 그 모델의 진짜 실력에 가까운 숫자예요.",
@@ -90,13 +106,16 @@ def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repe
     st, ss = b[("simple", "test")].rmse, b[("simple", "secondary_test")].rmse
     lines += [
         "",
+        "*칸 = RMSE (괄호 안 = 평균 % 오차 MAPE). RMSE(평균 제곱근 오차)는 예측이 실제 수명에서 대략 몇 사이클 빗나갔는지를 나타내요."
+        " 오차를 제곱해 평균 낸 뒤 제곱근을 씌워서, 크게 빗나간 셀이 있으면 더 커져요.*",
+        "",
         f"단순 모델의 테스트 / 2차 테스트 RMSE는 **{st:.0f} / {ss:.0f}사이클**이에요. "
         f"논문의 variance 모델은 **{PAPER_VARIANCE['test']} / {PAPER_VARIANCE['secondary_test']}사이클**이고, "
         f"출처는 {PAPER_SOURCE}예요. 논문 결과를 사이클 단위까지 재현했어요.",
         "",
         "## 실험 1 · 셀이 적어도 같은 신호를 찾았을까?",
         "",
-        "| 셀 수 | 상관 r 중앙값 | 90% 범위 | r이 −0.8보다 약하게 나온 비율 |",
+        "| 셀 수 | 상관 r 중앙값 | 가운데 90% 범위 (5~95%) | r이 −0.8보다 약하게 나온 비율 |",
         "|---|---|---|---|",
     ]
     for n in sorted(c, reverse=True):
@@ -105,6 +124,8 @@ def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repe
         lines.append(f"| {n}개 | {v['median']:.3f} | {rng} | {_pct(v['weaker_08']) if v['runs'] > 1 else '-'} |")
     vs = c[small]
     lines += [
+        "",
+        f"*가운데 90% 범위 = N마다 {corr_repeats:,}번 계산한 r을 작은 것부터 줄 세워 아래 5%와 위 5%를 뺀 구간이에요.*",
         "",
         "![상관의 흔들림](figures/data_size_corr.png)",
         "",
@@ -125,7 +146,11 @@ def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repe
             lines.append(f"| {n}개 ({v['n_train']}) | {NAMES[kind]} | **{v['actual_median']:.1f}%** | "
                          f"{v['actual_p10']:.1f} ~ {v['actual_p90']:.1f}% | {v['reported_p10']:.1f} ~ {v['reported_p90']:.1f}% | "
                          f"{_pct(v['bad'])} | {_pct(v['flattered'])} |")
-    lines += ["", f"*{max(ns)}개일 때는 평가 셀이 곧 '학습에 안 쓴 나머지 전체'라서 보고된 오차와 실제 오차가 같아요.*"]
+    lines += ["", f"*{max(ns)}개일 때는 평가 셀이 곧 '학습에 안 쓴 나머지 전체'라서 보고된 오차와 실제 오차가 같아요.*",
+              "",
+              f"*10~90% = N마다 {repeats}번 흉내 낸 연구의 오차를 작은 것부터 줄 세워 아래 10%와 위 10%를 뺀 가운데 80% 구간이에요"
+              " (오차 자체가 10~90%라는 뜻이 아니에요). '실제 25% 초과'·'실제보다 5%p 넘게 좋게 보고' ="
+              f" {repeats}번 가운데 그런 연구의 비율이에요.*"]
     big, mid = max(ns), sorted(ns)[1]
     s_big, s_mid, s_small = p[(big, "simple")], p[(mid, "simple")], p[(small, "simple")]
     f_big, f_mid = p.get((big, "full")), p.get((mid, "full"))
@@ -135,12 +160,12 @@ def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repe
         "",
         "### 읽는 법",
         "",
-        f"1. **{mid}개까지는 평균이 거의 안 나빠져요.** 단순 모델의 실제 오차 중앙값은 {big}개 {s_big['actual_median']:.1f}% → "
+        f"1. **{mid}개까지는 오차 중앙값이 거의 안 나빠져요.** 단순 모델의 실제 오차 중앙값은 {big}개 {s_big['actual_median']:.1f}% → "
         f"{mid}개 {s_mid['actual_median']:.1f}%예요. 신호 하나에 직선 하나라 학습 셀 {s_mid['n_train']}개로도 거의 같은 직선이 나와요.",
         f"2. **대신 '운'의 폭이 커져요.** 10~90% 범위가 {big}개 {s_big['actual_p10']:.1f}~{s_big['actual_p90']:.1f}%에서 "
         f"{small}개 {s_small['actual_p10']:.1f}~{s_small['actual_p90']:.1f}%로 넓어져요. 셀 {small}개(학습 {s_small['n_train']}개)로 한 연구 중 "
         f"**{_pct(s_small['bad'])}는 실제 오차가 25%를 넘는 모델**을 얻어요.",
-        f"3. **작은 연구는 숫자가 실제보다 좋게 실릴 수 있어요.** 셀 {small}개 연구의 **{_pct(s_small['flattered'])}** 는 "
+        f"3. **작은 연구는 숫자가 실제보다 좋게 실릴 수 있어요.** 셀 {small}개 연구의 **{_pct(s_small['flattered'])}는** "
         f"보고된 오차가 실제보다 5%p 넘게 좋았어요. 평가 셀이 {s_small['n_test']}개뿐이라 쉬운 셀이 몰리면 성능이 부풀려져요.",
     ]
     if f_big and f_mid:
@@ -162,7 +187,10 @@ def markdown(base: pd.DataFrame, s: dict, full_r: float, repeats: int, corr_repe
         "## 한계",
         "",
         "- 같은 124개 셀에서 다시 뽑는 실험이라, 정말로 다른 셀 N개로 새 실험을 한 것과 같지는 않아요.",
-        "  특히 셀 10개를 뽑을 때 같은 충전 조건의 셀이 학습과 평가에 나뉘어 들어갈 수 있어요.",
+        "  또 같은 충전 조건의 셀이 학습과 평가에 나뉘어 들어갈 수 있고, 셀을 많이 뽑을수록 더 흔해요." + (
+            f" 논문 나누기에서도 테스트 셀 {same_policy['test'][1]}개 중 {same_policy['test'][0]}개는 학습 셀과 충전 조건이 같아요"
+            f" (2차 테스트 셀은 {same_policy['secondary_test'][1]}개 중 {same_policy['secondary_test'][0]}개)."
+            if same_policy else "") + " 이런 셀은 처음 보는 충전 조건의 셀보다 오차가 작게 나올 수 있어요.",
         "- 학습 비율을 논문처럼 1/3로 고정했어요. 셀이 적을 때는 학습에 더 많이 쓰는 게 보통이라, 셀 10개 결과는 비관적인 쪽이에요.",
         "- 6개 특징 모델은 논문의 discharge 모델을 참고해 직접 구현한 것이에요.",
         "",

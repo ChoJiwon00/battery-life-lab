@@ -1,0 +1,115 @@
+{
+  "python": "3.13.15",
+  "pybamm": "26.8.0.0",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "runs": [
+    {
+      "model": "SPM",
+      "c_rate": 0.5,
+      "seconds_incl_build": 0.064,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 2.1192,
+      "fraction_of_nominal": 0.9214,
+      "start_voltage_V": 3.5495,
+      "mid_voltage_V": 3.2255,
+      "end_voltage_V": 2.0,
+      "n_time_points": 83
+    },
+    {
+      "model": "SPMe",
+      "c_rate": 0.5,
+      "seconds_incl_build": 0.147,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 2.119,
+      "fraction_of_nominal": 0.9213,
+      "start_voltage_V": 3.5476,
+      "mid_voltage_V": 3.222,
+      "end_voltage_V": 2.0,
+      "n_time_points": 81
+    },
+    {
+      "model": "DFN",
+      "c_rate": 0.5,
+      "seconds_incl_build": 0.218,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 2.119,
+      "fraction_of_nominal": 0.9213,
+      "start_voltage_V": 3.5476,
+      "mid_voltage_V": 3.223,
+      "end_voltage_V": 2.0,
+      "n_time_points": 190
+    },
+    {
+      "model": "SPM",
+      "c_rate": 1.0,
+      "seconds_incl_build": 0.061,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 1.9395,
+      "fraction_of_nominal": 0.8433,
+      "start_voltage_V": 3.5173,
+      "mid_voltage_V": 3.1939,
+      "end_voltage_V": 2.0,
+      "n_time_points": 85
+    },
+    {
+      "model": "SPMe",
+      "c_rate": 1.0,
+      "seconds_incl_build": 0.145,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 1.9391,
+      "fraction_of_nominal": 0.8431,
+      "start_voltage_V": 3.5136,
+      "mid_voltage_V": 3.1877,
+      "end_voltage_V": 2.0,
+      "n_time_points": 80
+    },
+    {
+      "model": "DFN",
+      "c_rate": 1.0,
+      "seconds_incl_build": 0.208,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 1.9391,
+      "fraction_of_nominal": 0.8431,
+      "start_voltage_V": 3.5136,
+      "mid_voltage_V": 3.1889,
+      "end_voltage_V": 2.0,
+      "n_time_points": 180
+    },
+    {
+      "model": "SPM",
+      "c_rate": 2.0,
+      "seconds_incl_build": 0.056,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 1.5998,
+      "fraction_of_nominal": 0.6956,
+      "start_voltage_V": 3.4775,
+      "mid_voltage_V": 3.1477,
+      "end_voltage_V": 2.0,
+      "n_time_points": 83
+    },
+    {
+      "model": "SPMe",
+      "c_rate": 2.0,
+      "seconds_incl_build": 0.126,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 1.5989,
+      "fraction_of_nominal": 0.6952,
+      "start_voltage_V": 3.47,
+      "mid_voltage_V": 3.1371,
+      "end_voltage_V": 2.0,
+      "n_time_points": 82
+    },
+    {
+      "model": "DFN",
+      "c_rate": 2.0,
+      "seconds_incl_build": 0.206,
+      "nominal_capacity_Ah": 2.3,
+      "discharged_capacity_Ah": 1.5989,
+      "fraction_of_nominal": 0.6952,
+      "start_voltage_V": 3.47,
+      "mid_voltage_V": 3.1375,
+      "end_voltage_V": 2.0,
+      "n_time_points": 179
+    }
+  ]
+}

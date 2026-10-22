@@ -19,3 +19,7 @@
   형식: 상황 → 처음 생각 → 어떻게 알아챘나 → 원인 → 수정 → 재발 방지. 실제로 있었던 일만 쓴다.
 - 리포트·문서에 쓰는 숫자는 출처 링크가 있거나 코드가 계산한 값만 쓴다. 검증은 표본 하나가 아니라 전체 셀로 한다.
 - 품질 리포트는 `.venv\Scripts\python.exe -m battery_lab report`로 다시 만든다 (손으로 고치지 않는다).
+  자동 생성 문서(data_quality·data_size·cycles·screening·uncertainty·policies·interpret)도 생성기(`battery_lab/report.py`·`battery_lab/*_report.py`)를 고친 뒤 명령으로 다시 만든다.
+- Windows Python에 넘기는 경로는 `C:\...` 형식으로 쓴다. Git Bash 형식(`/c/Users/...`)을 넘기면 `C:\c\...`에 새 폴더가 생긴다(troubleshooting 32·37번).
+- 생성 문서는 `battery_lab/mdtext.write_doc`으로 쓴다. 범위의 `~`를 `\~`로 바꿔 GitHub에서 취소선이 되지 않게 한다.
+- 생성 문장에서 숫자 바로 뒤 조사는 `battery_lab/korean.py`(ieyo·euro·ieotda)로 고른다. 숫자가 바뀌면 조사도 바뀐다.

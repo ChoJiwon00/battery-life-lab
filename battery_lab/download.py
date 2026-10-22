@@ -7,6 +7,7 @@ from pathlib import Path
 from .sources import RAW, Batch
 
 CHUNK = 1 << 20  # 1MB씩 읽는다
+GB = 1024**3     # 진행 표시의 GB. `info`(__main__._gb)·문서·Windows 탐색기와 같은 1024³바이트 단위 (엄밀히는 GiB)
 
 
 class DownloadError(RuntimeError):
@@ -50,7 +51,7 @@ def download(batch: Batch, folder: Path = RAW, progress=print, opener=urllib.req
                 pct = done * 100 // batch.size
                 if pct != shown and pct % 5 == 0:
                     shown = pct
-                    progress(f"{batch.date}: {pct}% ({done / 1e9:.2f} / {batch.size / 1e9:.2f} GB)")
+                    progress(f"{batch.date}: {pct}% ({done / GB:.2f} / {batch.size / GB:.2f} GB)")
 
     got = part.stat().st_size
     if got != batch.size:

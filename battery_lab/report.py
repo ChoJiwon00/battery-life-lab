@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .mdtext import write_doc
 from . import figures
 from .quality import CellReport, alignment_check, check_all, hotspots, load_processed, paper_checks
 from .sources import ROOT
@@ -20,6 +21,12 @@ OFFICIAL_NOTES = {
     "b2": "컴퓨터 재시작으로 대부분의 셀이 250사이클 근처에서 약 8시간 쉼 → 용량 '튐'.",
     "b3": "내부저항 측정 때문에 생긴 OCV 오류로 시험이 잠깐씩 멈춤.",
 }
+RESTART_NEAR = {"b2": 250}   # 공식 노트에 재시작 사이클이 적혀 있는 배치
+NOTE_EVENT = {"b1": "'두 번 자동 재시작'"}   # 문장에서 바로 뒤에 '과'가 붙으므로 받침으로 끝나는 말로 쓴다
+
+# 이상이 몰린 무리: 바로 앞 이상과 HOTSPOT_GAP사이클 안이면 한 무리, 셀 HOTSPOT_CELLS개 이상이 겪은 무리만 적는다
+HOTSPOT_GAP = 20
+HOTSPOT_CELLS = 5
 
 KNOWN = [  # 이상이 아니라 데이터가 원래 그렇게 기록된 것
     ("b1 배치의 1번째 사이클 빈 자리 (0으로 채운 줄)", lambda r: r.placeholder_rows > 0),
@@ -59,7 +66,7 @@ def to_frame(reports: list[CellReport]) -> pd.DataFrame:
 def build(processed: Path, docs: Path = DOCS) -> dict:
     reports = check_all(processed)
     checks = paper_checks(reports, processed)
-    checks["hotspots"] = hotspots(reports)
+    checks["hotspots"] = hotspots(reports, width=HOTSPOT_GAP, min_cells=HOTSPOT_CELLS)
     _, summary = load_processed(processed)
     checks["alignment"] = alignment_check(processed, [r.cell_id for r in reports], summary)
     to_frame(reports).to_csv(processed / "quality.csv", index=False, encoding="utf-8")
@@ -70,7 +77,7 @@ def build(processed: Path, docs: Path = DOCS) -> dict:
     figures.logvar_vs_life(reports, checks["feature"], checks["logvar_corr"], fig_dir / "logvar_vs_life.png")
     figures.quality_example(summary, reports, fig_dir / "quality_example.png")
 
-    (docs / "data_quality.md").write_text(markdown(reports, checks), encoding="utf-8")
+    write_doc(docs / "data_quality.md", markdown(reports, checks))
     return checks
 
 
@@ -95,14 +102,17 @@ def markdown(reports: list[CellReport], c: dict) -> str:
         "|---|---|---|",
         f"| 셀 수 | {PAPER['cells']} | {c['cells']} (배치별 {batch['b1']} · {batch['b2']} · {batch['b3']}) |",
         f"| 학습 / 테스트 / 2차 테스트 | {PAPER['split']} | {split['train']} / {split['test']} / {split['secondary_test']} |",
-        f"| 사이클 수명 범위 | {PAPER['life']} | {c['life_min']:,.0f} ~ {c['life_max']:,.0f} (중앙값 {c['life_median']:,.0f}) |",
+        f"| 사이클 수명 범위 | {PAPER['life']} | {c['life_min']:,.0f} ~ {c['life_max']:,.0f} (중앙값 {c['life_median']:,g}) |",
         f"| 사이클 2 → 100 용량 변화 (중앙값) | {PAPER['change_100']} | {c['change_100_median_pct']:+.2f}% |",
         f"| log Var(ΔQ₁₀₀₋₁₀)와 log 수명의 상관 | 강한 음의 상관 | r = {c['logvar_corr']:.3f} ({c['logvar_cells']}개 셀) |",
+        "",
+        "*r = 상관계수(피어슨). 두 값이 한 직선을 따라 함께 움직이는 정도로, −1~+1 사이예요. −1에 가까울수록"
+        " \"ΔQ 분산이 클수록 수명이 짧다\"는 관계가 뚜렷하고, 0이면 직선 관계가 없어요.*",
         "",
         "![124개 셀의 방전 용량 변화](figures/capacity_fade.png)",
         "",
         "**읽는 법.** 초반 100사이클 동안 용량은 거의 변하지 않아서, 용량만 보면 어느 셀이 일찍 죽을지 알 수 없어요.",
-        "하지만 100번째와 10번째 방전 곡선의 **차이(ΔQ)** 를 보면 셀마다 벌어지는 정도가 달라요.",
+        "하지만 100번째와 10번째 방전 곡선의 **차이(ΔQ)를** 보면 셀마다 벌어지는 정도가 달라요.",
         "",
         "![ΔQ 곡선](figures/delta_q.png)",
         "",
@@ -143,19 +153,43 @@ def markdown(reports: list[CellReport], c: dict) -> str:
     hs = c.get("hotspots", {})
     if hs:
         lines += ["", "### 이상이 몰린 곳 ↔ 공식 실험 노트", "",
-                  "회복 튐·범위 밖 용량·깨진 곡선·긴 충전 시간이 일어난 사이클을 20사이클 구간으로 묶어, 가장 많이 몰린 구간을 찾았어요.", "",
-                  "| 배치 | 가장 많이 몰린 구간 | 몰린 정도 | 공식 실험 노트 |", "|---|---|---|---|"]
+                  "회복 튐·범위 밖 용량·깨진 곡선·긴 충전 시간이 일어난 사이클을 순서대로 놓고, 바로 앞 이상과 "
+                  f"{HOTSPOT_GAP}사이클 안에 이어지면 한 무리로 묶었어요. 셀 {HOTSPOT_CELLS}개 이상에서 일어난 무리만 적었어요"
+                  " (한 셀에서만 되풀이된 이상은 그 셀만의 문제일 수 있어서요).", "",
+                  "| 배치 | 이상이 몰린 사이클 | 이상 건수 | 겪은 셀 | 공식 실험 노트 |", "|---|---|---|---|---|"]
         for key, h in hs.items():
-            lines.append(f"| {key} | 사이클 {h['start']}~{h['end']} | 이상 {h['events']}/{h['total']}건 · "
-                         f"셀 {h['cells']}/{h['batch_cells']}개 | {OFFICIAL_NOTES.get(key, '')} |")
+            note = OFFICIAL_NOTES.get(key, "")
+            if not h["clusters"]:
+                lines.append(f"| {key} | 없음 | 배치 전체 {h['total']}건 | 셀 {HOTSPOT_CELLS}개 이상에서 일어난 무리 없음 | {note} |")
+            for i, g in enumerate(h["clusters"]):
+                lines.append(f"| {key} | {g['first']:,} ~ {g['last']:,} | {g['events']}/{h['total']}건 | "
+                             f"{g['cells']}/{g['running']}개 | {note if i == 0 else '(위와 같음)'} |")
+        lines += ["", "*이상 건수 a/b = 이 무리의 이상 a건 / 그 배치의 이상 전체 b건. 겪은 셀 a/b = 이 무리에서 이상을 겪은 셀 a개"
+                  " / 무리가 시작된 사이클까지 시험 중이던 셀 b개.*", ""]
 
-        lines.append("")
         for key, h in hs.items():
-            share = h["events"] / h["total"]
-            if key == "b2" and 230 <= h["start"] <= 260:
-                lines.append(f"- **b2에서는 공식 노트의 재시작 시점(250사이클 근처)과 겹쳐요.** 이상의 {share:.0%}가 이 구간에 몰려 있어요.")
-            elif share < 0.3:
-                lines.append(f"- {key}에서는 이상이 한 구간에 몰리지 않고 흩어져 있어요 (가장 많은 구간도 {share:.0%}).")
+            groups, total = h["clusters"], h["total"]
+            near = RESTART_NEAR.get(key)
+            hit = [g for g in groups if near is not None and g["first"] - HOTSPOT_GAP <= near <= g["last"] + HOTSPOT_GAP]
+            if hit:
+                g = max(hit, key=lambda g: g["events"])
+                lines.append(f"- **{key}에서는 공식 노트의 재시작 시점({near}사이클 근처)과 겹쳐요.** 이상 {total}건 중 "
+                             f"{g['events']}건({g['events'] / total:.0%})이 사이클 {g['first']:,} ~ {g['last']:,}에 몰려 있어요.")
+            elif groups:
+                inside = sum(g["events"] for g in groups)
+                subject = "이상이" if inside * 2 >= total else "이상 일부가"   # 절반이 안 되면 '일부'라고 쓴다
+                text = (f"- **{key}에서는 {subject} 여러 셀의 비슷한 사이클에 몰려 있어요.** 위 표의 무리 {len(groups)}개에 "
+                        f"이상 {total}건 중 {inside}건({inside / total:.0%})이 들어 있어요.")
+                if len(groups) > 1:
+                    top = sorted(groups, key=lambda g: (-g["events"], g["first"]))[:2]
+                    # 조사가 숫자 바로 뒤에 오지 않게 쓴다 ('13에'의 '에'는 받침과 상관없음)
+                    text += " 가장 큰 두 무리를 보면 " + ", ".join(
+                        f"사이클 {g['first']:,} ~ {g['last']:,}에 셀 {g['cells']}개에서 이상 {g['events']}건" for g in top) + "이 있어요."
+                text += f" 공식 노트에 적힌 {NOTE_EVENT.get(key, '일')}과 같은 때인지는 시간 기록으로 확인하지 않았어요."
+                lines.append(text)
+            else:
+                # '흩어져 있다'고 쓰지 않는다: 무리가 없어도 이상이 한 셀에 몰렸을 수 있다
+                lines.append(f"- {key}에서는 셀 {HOTSPOT_CELLS}개 이상에서 일어난 무리가 없어요 (이상 {total}건).")
 
     seams = [r for r in reports if np.isfinite(r.seam_cycle)]
     if seams:

@@ -6,7 +6,15 @@
     python -m battery_lab assemble             논문 규칙대로 124개 셀 데이터셋 만들기
     python -m battery_lab report               품질 점검·논문 비교·그래프 → docs/data_quality.md
     python -m battery_lab sizes                데이터 크기 실험 (셀이 70·35·10개뿐이었다면?) → docs/data_size.md
+    python -m battery_lab cycles               사이클 수 실험 (몇 사이클이면 충분할까?) → docs/cycles.md
+    python -m battery_lab screening            5사이클로 수명이 짧을 셀 골라내기 → docs/screening.md
+    python -m battery_lab uncertainty          예측에 오차 범위 붙이기 → docs/uncertainty.md
+    python -m battery_lab policies             급속충전 조건과 수명 → docs/policies.md
+    python -m battery_lab interpret            ΔQ 특징이 왜 통하나 → docs/interpret.md
+    python -m battery_lab judgment --miss-cost 10   판단 실험: 놓침 1개 = 버림 몇 개 손해? (결과 표만 출력)
 """
+
+import importlib
 
 import argparse
 import sys
@@ -103,6 +111,33 @@ def cmd_sizes(args) -> None:
         print(f"  셀 {n}개 · {kind}: 실제 오차 중앙값 {v['actual_median']:.1f}% (10~90% {v['actual_p10']:.1f}~{v['actual_p90']:.1f}%)")
 
 
+# 응용 실험: 명령 → (리포트 모듈, 도움말). 각 모듈의 build()가 문서와 그래프를 만든다.
+EXPERIMENTS = {
+    "cycles": ("cycle_report", "사이클 수 실험: 몇 사이클이면 충분할까? (약 5분)"),
+    "screening": ("screening_report", "5사이클로 수명이 짧을 셀(550사이클 미만) 골라내기 (약 3분)"),
+    "uncertainty": ("uncertainty_report", "예측에 오차 범위 붙이기: 90% 범위가 정말 90% 맞나 (약 2분)"),
+    "policies": ("policies_report", "급속충전 조건(C1(Q1%)-C2)과 수명 (약 5초)"),
+    "interpret": ("interpret_report", "ΔQ 특징이 왜 통하나: 전압별 상관·dQ/dV (약 10초)"),
+}
+
+
+def cmd_experiment(args) -> None:
+    module = importlib.import_module(f".{EXPERIMENTS[args.command][0]}", __package__)
+    module.build()  # 그래프·모델 라이브러리는 이 명령에서만 불러온다
+    print(f"→ docs/{args.command}.md")
+
+
+def cmd_judgment(args) -> None:
+    from .judgment import format_table, run  # noqa: PLC0415
+
+    table = run(tuple(args.miss_cost), repeats=args.repeats)
+    print()
+    print("5사이클 '셀 신호' 모델, 무작위 나누기 결과 (중앙값, 괄호는 나쁜 쪽 90% 끝)")
+    print(format_table(table))
+    print()
+    print("※ 이 데이터의 단수명 셀은 거의 b2 배치에 몰려 있어요. 해석 전에 docs/screening.md '읽는 법' 2번을 꼭 보세요.")
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="battery_lab", description="배터리 수명 예측·열화 분석")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -121,6 +156,13 @@ def main(argv=None) -> None:
     p.add_argument("--repeats", type=int, default=300, help="크기마다 예측 실험 반복 수")
     p.add_argument("--corr-repeats", type=int, default=2000, help="크기마다 상관 실험 반복 수")
     p.set_defaults(func=cmd_sizes)
+    p = sub.add_parser("judgment", help="판단 실험: 불량 1개를 놓치는 손해 = 정상 셀 몇 개를 버리는 손해?")
+    p.add_argument("--miss-cost", type=float, nargs="+", required=True, help="비교할 값 (예: 10 또는 2 10 30)")
+    p.add_argument("--repeats", type=int, default=100, help="무작위 나누기 반복 수")
+    p.set_defaults(func=cmd_judgment)
+    for name, (_, help_text) in EXPERIMENTS.items():
+        # argparse는 도움말의 %를 서식 기호로 읽어서 %%로 바꿔 줘야 한다 (troubleshooting.md)
+        sub.add_parser(name, help=help_text.replace("%", "%%")).set_defaults(func=cmd_experiment)
     args = parser.parse_args(argv)
     args.func(args)
 
