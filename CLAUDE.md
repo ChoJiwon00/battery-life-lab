@@ -21,5 +21,8 @@
 - 품질 리포트는 `.venv\Scripts\python.exe -m battery_lab report`로 다시 만든다 (손으로 고치지 않는다).
   자동 생성 문서(data_quality·data_size·cycles·screening·uncertainty·policies·interpret)도 생성기(`battery_lab/report.py`·`battery_lab/*_report.py`)를 고친 뒤 명령으로 다시 만든다.
 - Windows Python에 넘기는 경로는 `C:\...` 형식으로 쓴다. Git Bash 형식(`/c/Users/...`)을 넘기면 `C:\c\...`에 새 폴더가 생긴다(troubleshooting 32·37번).
+- `my_work/`는 사용자가 직접 판단·실행·작성한 작업이다. AI는 질문 틀을 만들고, 사용자가 쓴 초안의 문장만 다듬는다.
+  판단·근거·해석은 그대로 두고 새 주장은 넣지 않는다. 숫자는 실행 결과와 대조해 틀린 것만 고친다. 파일 맨 위에 누가 무엇을 했는지 적는다.
+  `my_work/` 커밋은 사용자 이름으로만, AI 공동 작성 표시 없이 한다.
 - 생성 문서는 `battery_lab/mdtext.write_doc`으로 쓴다. 범위의 `~`를 `\~`로 바꿔 GitHub에서 취소선이 되지 않게 한다.
 - 생성 문장에서 숫자 바로 뒤 조사는 `battery_lab/korean.py`(ieyo·euro·ieotda)로 고른다. 숫자가 바뀌면 조사도 바뀐다.
